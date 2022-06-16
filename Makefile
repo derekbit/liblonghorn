@@ -16,7 +16,7 @@ CLEANEXTS=o a
 all: $(OUTPUT_FILE)
 
 $(OUTPUT_FILE): $(OBJECTS)
-	ar r $@ $^ $(LIBS) libtcmalloc.a
+	ar r $@ $^ $(LIBS) /usr/local/lib/libtcmalloc.a
 	ranlib $@
 
 .c.o:
