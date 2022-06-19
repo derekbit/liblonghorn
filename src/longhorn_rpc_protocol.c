@@ -142,10 +142,8 @@ static int read_header(int fd, struct Message *msg) {
 }
 
 // Caller needs to release msg->Data
-int receive_msg(int fd, struct Message *msg) {
+int receive_msg_header(int fd, struct Message *msg) {
 	ssize_t n;
-
-        bzero(msg, sizeof(struct Message));
 
         // There is only one thread reading the response, and socket is
         // full-duplex, so no need to lock
@@ -154,15 +152,17 @@ int receive_msg(int fd, struct Message *msg) {
                 errorf("fail to read header\n");
                 return -EINVAL;
         }
+        return 0;
+}
 
-	if (msg->DataLength > 0) {
-		n = read_full(fd, msg->Data, msg->DataLength);
-		if (n != msg->DataLength) {
-                        errorf("Cannot read full from fd, %u vs %zd\n",
-                                msg->DataLength, n);
-			free(msg->Data);
-			return -EINVAL;
-		}
+int receive_msg_data(int fd, struct Message *msg) {
+	ssize_t n;
+
+	n = read_full(fd, msg->Data, msg->DataLength);
+	if (n != msg->DataLength) {
+                errorf("Cannot read full from fd, %u vs %zd\n",
+                        msg->DataLength, n);
+		return -EINVAL;
 	}
 	return 0;
 }

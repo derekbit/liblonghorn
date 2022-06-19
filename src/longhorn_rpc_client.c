@@ -33,7 +33,27 @@ int send_request(struct lh_client_conn *conn, struct Message *req) {
 }
 
 int receive_response(struct lh_client_conn *conn, struct Message *resp) {
-        return receive_msg(conn->fd, resp);
+        int rc;
+
+        bzero(resp, sizeof(struct Message));
+
+        rc = receive_msg_header(conn->fd, resp);
+        if (rc != 0) {
+                return rc;
+        }
+
+        if (resp->DataLength > 0) {
+                struct Message *req;
+
+                req = find_request_from_queue(conn, resp->Seq);
+                if (req == NULL) {
+                        return 0;
+                }
+
+                resp->Data = req->Data;
+                return receive_msg_data(conn->fd, resp);
+        }
+        return 0;
 }
 
 // Must be called with conn->msg_mutex hold
@@ -121,6 +141,16 @@ struct Message *find_and_remove_request_from_queue(struct lh_client_conn *conn,
         return req;
 }
 
+struct Message *find_request_from_queue(struct lh_client_conn *conn,
+                int seq) {
+        struct Message *req = NULL;
+
+        pthread_mutex_lock(&conn->msg_mutex);
+        HASH_FIND_INT(conn->msg_hashtable, &seq, req);
+        pthread_mutex_unlock(&conn->msg_mutex);
+        return req;
+}
+
 int lh_client_close_conn(struct lh_client_conn *conn) {
         struct Message *req, *tmp;
 
@@ -182,7 +212,6 @@ void* response_process(void *arg) {
             perror("cannot allocate memory for resp");
             return NULL;
         }
-        resp->Data = req->Data;
 
         while (1) {
                 ret = receive_response(conn, resp);
@@ -215,7 +244,6 @@ void* response_process(void *arg) {
                 req = find_and_remove_request_from_queue(conn, resp->Seq);
                 if (req == NULL) {
                         errorf("Unknown response sequence %d\n", resp->Seq);
-                        free(resp->Data);
                         continue;
                 }
 
@@ -224,16 +252,9 @@ void* response_process(void *arg) {
                 if (resp->Type == TypeResponse || resp->Type == TypeEOF) {
 			req->Size = resp->Size;
 			req->DataLength = resp->DataLength;
-                        /*
-			if (resp->DataLength != 0) {
-                                fprintf(stderr, "Debug resp->DataLength=%d\n", resp->DataLength);
-				memcpy(req->Data, resp->Data, resp->DataLength);
-			}
-                        */
                 } else if (resp->Type == TypeError) {
                         req->Type = TypeError;
                 }
-                //free(resp->Data);
 
                 pthread_mutex_unlock(&req->mutex);
 
