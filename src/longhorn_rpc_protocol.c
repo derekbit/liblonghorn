@@ -156,11 +156,6 @@ int receive_msg(int fd, struct Message *msg) {
         }
 
 	if (msg->DataLength > 0) {
-		msg->Data = malloc(msg->DataLength);
-                if (msg->Data == NULL) {
-                        perror("cannot allocate memory for data");
-                        return -EINVAL;
-                }
 		n = read_full(fd, msg->Data, msg->DataLength);
 		if (n != msg->DataLength) {
                         errorf("Cannot read full from fd, %u vs %zd\n",

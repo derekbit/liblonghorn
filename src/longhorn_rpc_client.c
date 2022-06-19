@@ -182,6 +182,7 @@ void* response_process(void *arg) {
             perror("cannot allocate memory for resp");
             return NULL;
         }
+        resp->Data = req->Data;
 
         while (1) {
                 ret = receive_response(conn, resp);
@@ -223,13 +224,16 @@ void* response_process(void *arg) {
                 if (resp->Type == TypeResponse || resp->Type == TypeEOF) {
 			req->Size = resp->Size;
 			req->DataLength = resp->DataLength;
+                        /*
 			if (resp->DataLength != 0) {
+                                fprintf(stderr, "Debug resp->DataLength=%d\n", resp->DataLength);
 				memcpy(req->Data, resp->Data, resp->DataLength);
 			}
+                        */
                 } else if (resp->Type == TypeError) {
                         req->Type = TypeError;
                 }
-                free(resp->Data);
+                //free(resp->Data);
 
                 pthread_mutex_unlock(&req->mutex);
 
