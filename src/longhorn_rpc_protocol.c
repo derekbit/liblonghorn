@@ -6,8 +6,6 @@
 #include "log.h"
 #include "longhorn_rpc_protocol.h"
 
-#define REQUEST_HEADER_SIZE 26
-
 static ssize_t read_full(int fd, void *buf, ssize_t len) {
         ssize_t nread = 0;
         ssize_t ret;
@@ -46,7 +44,7 @@ static ssize_t write_full(int fd, void *buf, ssize_t len) {
         return nwrote;
 }
 
-static int write_header(int fd, struct Message *msg) {
+static int write_header(int fd, struct Message *msg, uint8_t *header) {
         uint16_t MagicVersion = htole16(msg->MagicVersion);
 	uint32_t Seq = htole32(msg->Seq);
 	uint32_t Type = htole32(msg->Type);
@@ -54,7 +52,6 @@ static int write_header(int fd, struct Message *msg) {
 	uint32_t Size = htole32(msg->Size);
 	uint32_t DataLength = htole32(msg->DataLength);
 
-        uint8_t header[REQUEST_HEADER_SIZE];
         int offset = 0;
 
         memcpy(header, &MagicVersion, sizeof(MagicVersion));
@@ -75,16 +72,16 @@ static int write_header(int fd, struct Message *msg) {
         memcpy(header + offset, &DataLength, sizeof(DataLength));
         offset += sizeof(DataLength);
 
-        return write_full(fd, header, sizeof(header));
+        return write_full(fd, header, offset);
 }
 
-int send_msg(int fd, struct Message *msg) {
+int send_msg(int fd, struct Message *msg, uint8_t *header, int header_size) {
         ssize_t n = 0;
 
         msg->MagicVersion = MAGIC_VERSION;
 
-        n = write_header(fd, msg);
-        if (n != REQUEST_HEADER_SIZE) {
+        n = write_header(fd, msg, header);
+        if (n != header_size) {
                 errorf("fail to write header\n");
                 return -EINVAL;
         }
@@ -102,13 +99,12 @@ int send_msg(int fd, struct Message *msg) {
         return 0;
 }
 
-static int read_header(int fd, struct Message *msg) {
-        uint8_t header[REQUEST_HEADER_SIZE];
+static int read_header(int fd, struct Message *msg, uint8_t *header, int header_size) {
         uint64_t Offset;
         int offset = 0, n = 0;
 
-        n = read_full(fd, header, sizeof(header));
-        if (n != sizeof(header)) {
+        n = read_full(fd, header, header_size);
+        if (n != header_size) {
                 errorf("fail to read header\n");
 		return -EINVAL;
         }
@@ -142,15 +138,15 @@ static int read_header(int fd, struct Message *msg) {
 }
 
 // Caller needs to release msg->Data
-int receive_msg(int fd, struct Message *msg) {
+int receive_msg(int fd, struct Message *msg, uint8_t *header, int header_size) {
 	ssize_t n;
 
         bzero(msg, sizeof(struct Message));
 
         // There is only one thread reading the response, and socket is
         // full-duplex, so no need to lock
-        n = read_header(fd, msg);
-        if (n != REQUEST_HEADER_SIZE) {
+        n = read_header(fd, msg, header, header_size);
+        if (n != header_size) {
                 errorf("fail to read header\n");
                 return -EINVAL;
         }
