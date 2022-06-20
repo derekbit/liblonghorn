@@ -35,7 +35,7 @@ enum uint32_t {
 	TypeClose
 };
 
-int send_msg(int fd, struct Message *msg);
-int receive_msg(int fd, struct Message *msg);
+int send_msg(int fd, struct Message *msg, uint8_t *header, int header_size);
+int receive_msg(int fd, struct Message *msg, uint8_t *header, int header_size);
 
 #endif
