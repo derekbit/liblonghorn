@@ -30,4 +30,8 @@ enum {
         CLIENT_CONN_STATE_CLOSE,
 };
 
+
+struct Message *find_and_remove_request_from_queue(struct lh_client_conn *conn, int seq);
+struct Message *find_request_from_queue(struct lh_client_conn *conn, int seq);
+
 #endif

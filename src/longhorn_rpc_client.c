@@ -32,8 +32,12 @@ int send_request(struct lh_client_conn *conn, struct Message *req) {
         return rc;
 }
 
-int receive_response(struct lh_client_conn *conn, struct Message *resp) {
-        return receive_msg(conn->fd, resp, conn->response_header, conn->header_size);
+int receive_response_header(struct lh_client_conn *conn, struct Message *resp) {
+        return receive_msg_header(conn->fd, resp, conn->response_header, conn->header_size);
+}
+
+int receive_response_data(struct lh_client_conn *conn, struct Message *resp) {
+        return receive_msg_data(conn->fd, resp);
 }
 
 // Must be called with conn->msg_mutex hold
@@ -121,6 +125,16 @@ struct Message *find_and_remove_request_from_queue(struct lh_client_conn *conn,
         return req;
 }
 
+struct Message *find_request_from_queue(struct lh_client_conn *conn,
+                int seq) {
+        struct Message *req = NULL;
+
+        pthread_mutex_lock(&conn->msg_mutex);
+        HASH_FIND_INT(conn->msg_hashtable, &seq, req);
+        pthread_mutex_unlock(&conn->msg_mutex);
+        return req;
+}
+
 int lh_client_close_conn(struct lh_client_conn *conn) {
         struct Message *req, *tmp;
 
@@ -177,14 +191,14 @@ void* response_process(void *arg) {
         struct Message *req, *resp;
         int ret = 0;
 
-	resp = malloc(sizeof(struct Message));
+	resp = calloc(1, sizeof(struct Message));
         if (resp == NULL) {
             perror("cannot allocate memory for resp");
             return NULL;
         }
 
         while (1) {
-                ret = receive_response(conn, resp);
+                ret = receive_response_header(conn, resp);
                 if (ret != 0) {
                         break;
                 }
@@ -214,7 +228,16 @@ void* response_process(void *arg) {
                 req = find_and_remove_request_from_queue(conn, resp->Seq);
                 if (req == NULL) {
                         errorf("Unknown response sequence %d\n", resp->Seq);
-                        free(resp->Data);
+                        // req is somehow missing.
+                        // Read the remaining data in the socket the skip the request.
+                        if (resp->DataLength > 0) {
+                                ret = receive_response_data(conn, resp);
+                                if (ret != 0) {
+                                        break;
+                                }
+                                free(resp->Data);
+                                resp->Data = NULL;
+                        }
                         continue;
                 }
 
@@ -223,13 +246,16 @@ void* response_process(void *arg) {
                 if (resp->Type == TypeResponse || resp->Type == TypeEOF) {
 			req->Size = resp->Size;
 			req->DataLength = resp->DataLength;
-			if (resp->DataLength != 0) {
-				memcpy(req->Data, resp->Data, resp->DataLength);
-			}
+                        if (resp->DataLength != 0) {
+                                ret = receive_response_data(conn, req);
+                                if (ret != 0) {
+                                        pthread_mutex_unlock(&req->mutex);
+                                        break;
+                                }
+                        }
                 } else if (resp->Type == TypeError) {
                         req->Type = TypeError;
                 }
-                free(resp->Data);
 
                 pthread_mutex_unlock(&req->mutex);
 

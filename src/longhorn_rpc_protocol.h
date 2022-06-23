@@ -45,6 +45,7 @@ enum uint32_t {
 };
 
 int send_msg(int fd, struct Message *msg, uint8_t *header, int header_size);
-int receive_msg(int fd, struct Message *msg, uint8_t *header, int header_size);
+int receive_msg_header(int fd, struct Message *msg, uint8_t *header, int header_size);
+int receive_msg_data(int fd, struct Message *msg);
 
 #endif
