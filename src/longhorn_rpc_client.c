@@ -52,6 +52,8 @@ void update_timeout_timer(struct lh_client_conn *conn) {
                         return;
                 }
 
+                LOG_ERROR("Arming timer for request timeout %d seconds",
+                                conn->request_timeout);
                 its.it_value.tv_sec += conn->request_timeout;
 
                 // Arm
